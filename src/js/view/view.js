@@ -48,28 +48,6 @@ function View(_api, _model) {
         model: _model
     });
 
-    // init/reset view model properties
-    Object.assign(_model.attributes, {
-        containerWidth: undefined,
-        containerHeight: undefined,
-        mediaContainer: undefined,
-        fullscreen: false,
-        inDom: undefined,
-        iFrame: undefined,
-        activeTab: undefined,
-        intersectionRatio: undefined,
-        visibility: undefined,
-        viewable: undefined,
-        viewSetup: false,
-        audioMode: undefined,
-        touchMode: undefined,
-        altText: '',
-        cues: undefined,
-        castClicked: false,
-        scrubbing: false,
-        logoWidth: 0,
-    });
-
     const _playerElement = createElement(playerTemplate(_model.get('id'), _model.get('localization').player));
     const _videoLayer = _playerElement.querySelector('.jw-media');
 
