@@ -263,25 +263,19 @@ const Model = function() {
 
         this.set('item', index);
         thenPlayPromise.cancel();
-        providerPromise = programController.setActiveItem(playlist[index]);
+
+        const item = playlist[index];
+
+        this.attributes.playlistItem = null;
+        this.mediaModel.off();
+        this.mediaModel = new Model.MediaModel();
+        resetItem(this, item);
+        this.set('minDvrWindow', item.minDvrWindow);
+        this.set('mediaModel', this.mediaModel);
+        this.set('playlistItem', item);
+
+        providerPromise = programController.setActiveItem(item);
         return providerPromise;
-    };
-
-    this.setProvider = function (nextProvider, item) {
-        _provider = nextProvider;
-        // this allows the providers to preload
-        if (_provider.init) {
-            _provider.init(item);
-        }
-
-        // Set the Provider after calling init because some Provider properties are only set afterwards
-        this.set('provider', _provider.getName());
-
-        // Listening for change:item won't suffice when loading the same index or file
-        // We also can't listen for change:mediaModel because it triggers whether or not
-        // an item was actually loaded
-        this.trigger('itemReady', item);
-        return resolved;
     };
 
     this.changeVideoProvider = function (nextProvider, item) {
@@ -299,7 +293,8 @@ const Model = function() {
         this.setPlaybackRate(this.get('defaultPlaybackRate'));
         providerController.sync(this, nextProvider);
 
-        return this.setProvider(nextProvider, item);
+        this.setProvider(nextProvider);
+        return programController.setProvider(nextProvider, item);
     };
 
     this.loadProviderList = function (playlist) {
@@ -347,6 +342,11 @@ const Model = function() {
         if (streamType === 'LIVE') {
             this.setPlaybackRate(1);
         }
+    };
+
+    this.setProvider = function (provider) {
+        _provider = provider;
+        this.set('provider', provider.getName());
     };
 
     this.resetProvider = function () {

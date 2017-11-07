@@ -2,7 +2,6 @@ import ProviderController from 'providers/provider-controller';
 import { resolved } from 'polyfills/promise';
 import { seconds } from 'utils/strings';
 import getMediaElement from 'api/get-media-element';
-import Model from 'controller/model';
 
 export default function ProgramController(model) {
     let _provider = null;
@@ -10,51 +9,23 @@ export default function ProgramController(model) {
 
     return {
         setActiveItem(item) {
-            model.mediaModel.off();
-            model.mediaModel = new Model.MediaModel();
-            resetItem(model, item);
-            model.set('minDvrWindow', item.minDvrWindow);
-            model.set('mediaModel', model.mediaModel);
-            model.attributes.playlistItem = null;
-            model.set('playlistItem', item);
-
             const source = item && item.sources && item.sources[0];
             if (source === undefined) {
                 // source is undefined when resetting index with empty playlist
                 throw new Error('No media');
             }
 
-            let ProviderConstructor = providerController.choose(source);
-            let providerPromise = resolved;
-
-            // We're changing providers
-            if (!ProviderConstructor || !(_provider && _provider instanceof ProviderConstructor)) {
-                // We haven't loaded the provider we need
-                if (!ProviderConstructor) {
-                    providerPromise = model.loadProviderList(model.get('playlist'));
-                }
-
-                // We're switching from one piece of media to another, so reset it
-                if (_provider) {
-                    resetProvider(_provider, model);
-                    _provider = null;
-                    replaceMediaElement(model);
-                }
+            if (_provider && !providerController.canPlay(_provider, source)) {
+                // If we can't play the source with the current provider, reset the current one and
+                // prime the next tag within the gesture
+                resetProvider(_provider, model);
+                _provider = null;
+                replaceMediaElement(model);
             }
 
             const mediaModelContext = model.mediaModel;
-            return providerPromise
-                .then(() => {
-                    ProviderConstructor = providerController.choose(source);
-                    // The provider we need couldn't be loaded
-                    if (!ProviderConstructor) {
-                        resetProvider(_provider, model);
-                        _provider = null;
-                        model.set('provider', undefined);
-                        throw new Error('No providers for playlist');
-                    }
-                })
-                .then(( ) => {
+            return this.loadProviderConstructor(source)
+                .then((ProviderConstructor) => {
                     // Don't do anything if we've tried loading another provider while model promise was resolving
                     if (mediaModelContext === model.mediaModel) {
                         syncPlayerWithMediaModel(mediaModelContext);
@@ -65,26 +36,49 @@ export default function ProgramController(model) {
                             _provider = nextProvider;
                             return model.changeVideoProvider(nextProvider, item);
                         }
-                        return model.setProvider(nextProvider, item);
+                        return this.setProvider(nextProvider, item);
                     }
                     return resolved;
                 });
+        },
+        loadProviderConstructor(source) {
+            let ProviderConstructor = providerController.choose(source);
+            if (ProviderConstructor) {
+                return Promise.resolve(ProviderConstructor);
+            }
+
+            return model.loadProviderList(model.get('playlist'))
+                .then(() => {
+                    ProviderConstructor = providerController.choose(source);
+                    // The provider we need couldn't be loaded
+                    if (!ProviderConstructor) {
+                        resetProvider(_provider, model);
+                        _provider = null;
+                        model.set('provider', undefined);
+                        throw new Error('No providers for playlist');
+                    }
+                    return ProviderConstructor;
+                });
+        },
+        setProvider(nextProvider, item) {
+            _provider = nextProvider;
+            model.setProvider(nextProvider);
+            // this allows the providers to preload
+
+            if (_provider.init) {
+                _provider.init(item);
+            }
+
+            // Set the Provider after calling init because some Provider properties are only set afterwards
+            model.set('provider', _provider.getName());
+
+            // Listening for change:item won't suffice when loading the same index or file
+            // We also can't listen for change:mediaModel because it triggers whether or not
+            // an item was actually loaded
+            model.trigger('itemReady', item);
+            return resolved;
         }
     };
-}
-
-function resetItem(model, item) {
-    const position = item ? seconds(item.starttime) : 0;
-    const duration = item ? seconds(item.duration) : 0;
-    const mediaModelState = model.mediaModel.attributes;
-    model.mediaModel.srcReset();
-    mediaModelState.position = position;
-    mediaModelState.duration = duration;
-
-    model.set('playRejected', false);
-    model.set('itemMeta', {});
-    model.set('position', position);
-    model.set('duration', duration);
 }
 
 function syncPlayerWithMediaModel(mediaModel) {
