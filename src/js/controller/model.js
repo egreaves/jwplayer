@@ -36,7 +36,7 @@ const Model = function() {
     this.setup = function(config) {
         Object.assign(this.attributes, config, INITIAL_PLAYER_STATE);
         providerController = ProviderController(this.getConfiguration());
-        programController = ProgramController(this);
+        programController = new ProgramController(this);
         this.setAutoStart();
         return this;
     };
@@ -47,7 +47,7 @@ const Model = function() {
         return config;
     };
 
-    function _videoEventHandler(type, data) {
+    this.videoEventHandler = function(type, data) {
         const event = Object.assign({}, data, {
             type: type
         });
@@ -198,7 +198,7 @@ const Model = function() {
         thenPlayPromise.cancel();
         _attached = false;
         if (_provider) {
-            _provider.off('all', _videoEventHandler, this);
+            _provider.off('all', this.videoEventHandler, this);
             _provider.detachMedia();
         }
     };
@@ -206,8 +206,8 @@ const Model = function() {
     this.attachMedia = function() {
         _attached = true;
         if (_provider) {
-            _provider.off('all', _videoEventHandler, this);
-            _provider.on('all', _videoEventHandler, this);
+            _provider.off('all', this.videoEventHandler, this);
+            _provider.on('all', this.videoEventHandler, this);
         }
         if (_beforecompleted) {
             this.playbackComplete();
@@ -276,25 +276,6 @@ const Model = function() {
 
         providerPromise = programController.setActiveItem(item);
         return providerPromise;
-    };
-
-    this.changeVideoProvider = function (nextProvider, item) {
-        this.off('change:mediaContainer', this.onMediaContainer);
-
-        const container = this.get('mediaContainer');
-        if (container) {
-            nextProvider.setContainer(container);
-        } else {
-            this.once('change:mediaContainer', this.onMediaContainer);
-        }
-
-        nextProvider.on('all', _videoEventHandler, this);
-        // Attempt setting the playback rate to be the user selected value
-        this.setPlaybackRate(this.get('defaultPlaybackRate'));
-        providerController.sync(this, nextProvider);
-
-        this.setProvider(nextProvider);
-        return programController.setProvider(nextProvider, item);
     };
 
     this.loadProviderList = function (playlist) {
