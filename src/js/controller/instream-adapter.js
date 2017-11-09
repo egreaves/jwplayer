@@ -305,7 +305,7 @@ var InstreamAdapter = function(_controller, _model, _view) {
                 const item = Object.assign({}, _olditem);
                 item.starttime = _oldpos;
                 _model.attributes.playlistItem = item;
-                _model.playVideo().catch(function(error) {
+                _controller.playVideo().catch(function(error) {
                     if (mediaModelContext === _model.mediaModel) {
                         _model.mediaController.trigger('error', {
                             message: error.message

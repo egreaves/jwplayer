@@ -2,7 +2,9 @@ import Eventable from 'utils/eventable';
 import ProviderController from 'providers/provider-controller';
 import { resolved } from 'polyfills/promise';
 import getMediaElement from 'api/get-media-element';
-import { PROVIDER_CHANGED } from 'events/events';
+import cancelable from 'utils/cancelable';
+
+import { ERROR, MEDIA_PLAY_ATTEMPT, MEDIA_PLAY_ATTEMPT_FAILED, PLAYER_STATE, STATE_PAUSED, STATE_BUFFERING } from 'events/events';
 
 export default class ProgramController extends Eventable {
     constructor(model) {
@@ -11,9 +13,18 @@ export default class ProgramController extends Eventable {
         this.activeProvider = null;
         this.model = model;
         this.providerController = ProviderController(model.getConfiguration());
+        this.thenPlayPromise = cancelable(() => {});
+        // The providerPromise will resolve with undefined or the active provider
+        this.providerPromise = resolved;
     }
 
     setActiveItem(item) {
+        this.thenPlayPromise.cancel();
+
+        const model = this.model;
+        model.setActiveItem(item);
+        model.resetItem(item);
+
         const source = item && item.sources && item.sources[0];
         if (source === undefined) {
             // source is undefined when resetting index with empty playlist
@@ -23,32 +34,30 @@ export default class ProgramController extends Eventable {
         if (this.activeProvider && !this.providerController.canPlay(this.activeProvider, source)) {
             // If we can't play the source with the current provider, reset the current one and
             // prime the next tag within the gesture
-            resetProvider(this.activeProvider, this.model);
+            resetProvider(this.activeProvider, model);
             this.activeProvider = null;
-            replaceMediaElement(this.model);
+            replaceMediaElement(model);
+            model.set(PLAYER_STATE, STATE_BUFFERING);
         }
 
-        const mediaModelContext = this.model.mediaModel;
-        return this.loadProviderConstructor(source)
+        const mediaModelContext = model.mediaModel;
+        this.providerPromise = this.loadProviderConstructor(source)
             .then((ProviderConstructor) => {
-                // Don't do anything if we've tried loading another provider while this.model promise was resolving
-                if (mediaModelContext === this.model.mediaModel) {
+                // Don't do anything if we've tried loading another provider while the load promise was resolving
+                if (mediaModelContext === model.mediaModel) {
                     let nextProvider = this.activeProvider;
                     if (!nextProvider) {
                         // We need to make a new provider
-                        nextProvider = new ProviderConstructor(this.model.get('id'), this.model.getConfiguration());
-                        return this.changeVideoProvider(nextProvider, item);
+                        nextProvider = new ProviderConstructor(model.get('id'), model.getConfiguration());
+                        this.changeVideoProvider(nextProvider);
                     }
-                    return this.setProvider(nextProvider, item);
+                    this.setProvider(nextProvider, item);
+                    return Promise.resolve(this.activeProvider);
                 }
                 return resolved;
-            })
-            .then(() => {
-                // Listening for change:item won't suffice when loading the same index or file
-                // We also can't listen for change:mediaModel because it triggers whether or not
-                // an item was actually loaded
-                return resolved;
             });
+
+        return this.providerPromise;
     }
 
     setProvider(nextProvider, item) {
@@ -61,12 +70,9 @@ export default class ProgramController extends Eventable {
         // Set the Provider after calling init because some Provider properties are only set afterwards
         this.activeProvider = nextProvider;
         this.model.setProvider(nextProvider);
-        this.trigger(PROVIDER_CHANGED, { nextProvider });
-
-        return resolved;
     }
 
-    changeVideoProvider(nextProvider, item) {
+    changeVideoProvider(nextProvider) {
         this.model.off('change:mediaContainer', this.model.onMediaContainer);
 
         const container = this.model.get('mediaContainer');
@@ -81,8 +87,6 @@ export default class ProgramController extends Eventable {
         // Attempt setting the playback rate to be the user selected value
         this.model.setPlaybackRate(this.model.get('defaultPlaybackRate'));
         this.providerController.sync(this.model, nextProvider);
-
-        return this.setProvider(nextProvider, item);
     }
 
     loadProviderConstructor(source) {
@@ -103,6 +107,62 @@ export default class ProgramController extends Eventable {
                 }
                 return ProviderConstructor;
             });
+    }
+
+    playVideo(playReason) {
+        const model = this.model;
+        const activeProvider = this.activeProvider;
+        let playPromise;
+
+        const item = model.get('playlistItem');
+        if (!item) {
+            return;
+        }
+
+        if (!playReason) {
+            playReason = model.get('playReason');
+        }
+
+        model.set('playRejected', false);
+        if (!model.mediaModel.get('setup')) {
+            playPromise = loadAndPlay(model, item, this.thenPlayPromise, this.providerPromise, activeProvider);
+            playAttempt(model, playPromise, playReason, activeProvider);
+        } else {
+            playPromise = activeProvider.play() || resolved;
+            if (!model.mediaModel.get('started')) {
+                playAttempt(model, playPromise, playReason, activeProvider);
+            }
+        }
+        return playPromise;
+    }
+
+    stopVideo() {
+        this.thenPlayPromise.cancel();
+
+        const model = this.model;
+        const item = model.get('playlist')[model.get('item')];
+
+        model.attributes.playlistItem = item;
+        model.resetItem(item);
+        if (this.activeProvider) {
+            this.activeProvider.stop();
+        }
+    }
+
+    preloadVideo() {
+        const model = this.model;
+        // TODO: attach/detach logic
+        let _attached = false;
+        const item = model.get('playlistItem');
+        // Only attempt to preload if media is attached and hasn't been loaded
+        if (model.get('state') === 'idle' && _attached && model.activeProvider &&
+            item.preload !== 'none' &&
+            model.get('autostart') === false &&
+            !model.mediaModel.get('setup') &&
+            !model.mediaModel.get('preloaded')) {
+            model.mediaModel.set('preloaded', true);
+            this.activeProvider.preload(item);
+        }
     }
 }
 
@@ -132,3 +192,84 @@ const resetProvider = (provider, model) => {
     }
     model.resetProvider();
 };
+
+
+function loadAndPlay(model, item, thenPlayPromise, providerPromise, provider) {
+    thenPlayPromise.cancel();
+
+    const mediaModelContext = model.mediaModel;
+    if (provider) {
+        return playWithProvider(item, provider, thenPlayPromise);
+    }
+
+    mediaModelContext.set('setup', true);
+
+    thenPlayPromise = cancelable((activeProvider) => {
+        if (mediaModelContext === model.mediaModel) {
+            return playWithProvider(item, activeProvider, thenPlayPromise);
+        }
+        throw new Error('Playback cancelled.');
+    });
+
+    return providerPromise.catch(error => {
+        thenPlayPromise.cancel();
+        // Required provider was not loaded
+        model.trigger(ERROR, {
+            message: `Could not play video: ${error.message}`,
+            error: error
+        });
+        // Fail the playPromise to trigger "playAttemptFailed"
+        throw error;
+    }).then(thenPlayPromise.async);
+}
+
+function playWithProvider(item, provider, thenPlayPromise) {
+    // Calling load() on Shaka may return a player setup promise
+    const providerSetupPromise = provider.load(item);
+    if (providerSetupPromise) {
+        thenPlayPromise = cancelable(() => {
+            return provider.play() || resolved;
+        });
+        return providerSetupPromise.then(thenPlayPromise.async);
+    }
+    return provider.play() || resolved;
+}
+
+function playAttempt(model, playPromise, playReason, provider) {
+    const mediaModelContext = model.mediaModel;
+    const itemContext = model.get('playlistItem');
+
+    model.mediaController.trigger(MEDIA_PLAY_ATTEMPT, {
+        item: itemContext,
+        playReason: playReason
+    });
+
+    // Immediately set player state to buffering if these conditions are met
+    const videoTagUnpaused = provider && provider.video && !provider.video.paused;
+    if (videoTagUnpaused) {
+        model.set(PLAYER_STATE, STATE_BUFFERING);
+    }
+
+    playPromise.then(() => {
+        if (!mediaModelContext.get('setup')) {
+            // Exit if model state was reset
+            return;
+        }
+        mediaModelContext.set('started', true);
+        if (mediaModelContext === model.mediaModel) {
+            syncPlayerWithMediaModel(mediaModelContext);
+        }
+    }).catch(error => {
+        model.set('playRejected', true);
+        const videoTagPaused = provider && provider.video && provider.video.paused;
+        if (videoTagPaused) {
+            mediaModelContext.set(PLAYER_STATE, STATE_PAUSED);
+        }
+        model.mediaController.trigger(MEDIA_PLAY_ATTEMPT_FAILED, {
+            error: error,
+            item: itemContext,
+            playReason: playReason
+        });
+    });
+}
+

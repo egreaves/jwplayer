@@ -7,12 +7,12 @@ import { PLAYER_STATE, STATE_IDLE, STATE_BUFFERING, STATE_PAUSED, STATE_COMPLETE
     MEDIA_PLAY_ATTEMPT, MEDIA_PLAY_ATTEMPT_FAILED, MEDIA_RATE_CHANGE,
     MEDIA_BUFFER, MEDIA_TIME, MEDIA_LEVELS, MEDIA_LEVEL_CHANGED, MEDIA_ERROR, ERROR,
     MEDIA_BEFORECOMPLETE, MEDIA_COMPLETE, MEDIA_META } from 'events/events';
-import { seconds } from 'utils/strings';
 import _ from 'utils/underscore';
 import Events from 'utils/backbone.events';
 import { resolved } from 'polyfills/promise';
 import cancelable from 'utils/cancelable';
 import ProviderController from 'providers/provider-controller';
+import { seconds } from 'utils/strings';
 
 // Represents the state of the player
 const Model = function() {
@@ -162,7 +162,7 @@ const Model = function() {
         }
 
         this.mediaController.trigger(type, event);
-    }
+    };
 
     this.setQualityLevel = function(quality, levels) {
         if (quality > -1 && levels.length > 1) {
@@ -174,6 +174,17 @@ const Model = function() {
         var currentLevel = levels[quality] || {};
         var label = currentLevel.label;
         this.set('qualityLabel', label);
+    };
+
+    this.setActiveItem = function (item) {
+        this.attributes.playlistItem = null;
+        this.mediaModel.off();
+        this.mediaModel = new Model.MediaModel();
+        this.set('item', _.indexOf(this.get('playlist'), item));
+        this.set('minDvrWindow', item.minDvrWindow);
+        this.set('mediaModel', this.mediaModel);
+        this.set('playlistItem', item);
+        this.trigger('itemReady', item);
     };
 
     this.setCurrentAudioTrack = function(currentTrack, tracks) {
@@ -314,139 +325,6 @@ const Model = function() {
         }
     };
 
-    function loadAndPlay(model, item) {
-        thenPlayPromise.cancel();
-
-        const mediaModelContext = model.mediaModel;
-
-        mediaModelContext.set('setup', true);
-        if (_provider) {
-            return playWithProvider(item);
-        }
-
-        thenPlayPromise = cancelable(() => {
-            if (mediaModelContext === model.mediaModel) {
-                return playWithProvider(item);
-            }
-            throw new Error('Playback cancelled.');
-        });
-
-        return model.providerPromise.catch(error => {
-            thenPlayPromise.cancel();
-            // Required provider was not loaded
-            model.trigger(ERROR, {
-                message: `Could not play video: ${error.message}`,
-                error: error
-            });
-            // Fail the playPromise to trigger "playAttemptFailed"
-            throw error;
-        }).then(thenPlayPromise.async);
-    }
-
-    function playWithProvider(item) {
-        // Calling load() on Shaka may return a player setup promise
-        const providerSetupPromise = _provider.load(item);
-        if (providerSetupPromise) {
-            thenPlayPromise = cancelable(() => {
-                return _provider.play() || resolved;
-            });
-            return providerSetupPromise.then(thenPlayPromise.async);
-        }
-        return _provider.play() || resolved;
-    }
-
-    function playAttempt(model, playPromise, playReason) {
-        const mediaModelContext = model.mediaModel;
-        const itemContext = model.get('playlistItem');
-
-        model.mediaController.trigger(MEDIA_PLAY_ATTEMPT, {
-            item: itemContext,
-            playReason: playReason
-        });
-
-        // Immediately set player state to buffering if these conditions are met
-        const videoTagUnpaused = _provider && _provider.video && !_provider.video.paused;
-        if (videoTagUnpaused) {
-            model.set(PLAYER_STATE, STATE_BUFFERING);
-        }
-
-        playPromise.then(() => {
-            if (!mediaModelContext.get('setup')) {
-                // Exit if model state was reset
-                return;
-            }
-            mediaModelContext.set('started', true);
-            if (mediaModelContext === model.mediaModel) {
-                syncPlayerWithMediaModel(mediaModelContext);
-            }
-        }).catch(error => {
-            model.set('playRejected', true);
-            const videoTagPaused = _provider && _provider.video && _provider.video.paused;
-            if (videoTagPaused) {
-                mediaModelContext.set(PLAYER_STATE, STATE_PAUSED);
-            }
-            model.mediaController.trigger(MEDIA_PLAY_ATTEMPT_FAILED, {
-                error: error,
-                item: itemContext,
-                playReason: playReason
-            });
-        });
-    }
-
-    function syncPlayerWithMediaModel(mediaModel) {
-        // Sync player state with mediaModel state
-        const mediaState = mediaModel.get('state');
-        mediaModel.trigger('change:state', mediaModel, mediaState, mediaState);
-    }
-
-    this.stopVideo = function() {
-        thenPlayPromise.cancel();
-        const item = this.get('playlist')[this.get('item')];
-        this.attributes.playlistItem = item;
-        resetItem(this, item);
-        if (_provider) {
-            _provider.stop();
-        }
-    };
-
-    this.preloadVideo = function() {
-        const item = this.get('playlistItem');
-        // Only attempt to preload if media is attached and hasn't been loaded
-        if (this.get('state') === 'idle' && _attached && _provider &&
-            item.preload !== 'none' &&
-            this.get('autostart') === false &&
-            !this.mediaModel.get('setup') &&
-            !this.mediaModel.get('preloaded')) {
-            this.mediaModel.set('preloaded', true);
-            _provider.preload(item);
-        }
-    };
-
-    this.playVideo = function(playReason) {
-        const item = this.get('playlistItem');
-        if (!item) {
-            return;
-        }
-
-        if (!playReason) {
-            playReason = this.get('playReason');
-        }
-
-        let playPromise;
-
-        this.set('playRejected', false);
-        if (!this.mediaModel.get('setup')) {
-            playPromise = loadAndPlay(this, item);
-            playAttempt(this, playPromise, playReason);
-        } else {
-            playPromise = _provider.play() || resolved;
-            if (!this.mediaModel.get('started')) {
-                playAttempt(this, playPromise, playReason);
-            }
-        }
-        return playPromise;
-    };
-
     this.persistCaptionsTrack = function() {
         var track = this.get('captionsTrack');
 
@@ -514,21 +392,21 @@ const Model = function() {
         }
         this.set('playOnViewable', autoStartOnMobile || this.get('autostart') === 'viewable');
     };
+
+    this.resetItem = function (item) {
+        const position = item ? seconds(item.starttime) : 0;
+        const duration = item ? seconds(item.duration) : 0;
+        const mediaModelState = this.mediaModel.attributes;
+        this.mediaModel.srcReset();
+        mediaModelState.position = position;
+        mediaModelState.duration = duration;
+
+        this.set('playRejected', false);
+        this.set('itemMeta', {});
+        this.set('position', position);
+        this.set('duration', duration);
+    };
 };
-
-function resetItem(model, item) {
-    const position = item ? seconds(item.starttime) : 0;
-    const duration = item ? seconds(item.duration) : 0;
-    const mediaModelState = model.mediaModel.attributes;
-    model.mediaModel.srcReset();
-    mediaModelState.position = position;
-    mediaModelState.duration = duration;
-
-    model.set('playRejected', false);
-    model.set('itemMeta', {});
-    model.set('position', position);
-    model.set('duration', duration);
-}
 
 // Represents the state of the provider/media element
 const MediaModel = Model.MediaModel = function() {

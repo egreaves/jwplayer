@@ -267,7 +267,7 @@ Object.assign(Controller.prototype, {
 
             // Only attempt to preload if this is the first player on the page or viewable
             if (instances[0] === _api || viewable === 1) {
-                model.preloadVideo();
+                _programController.preloadVideo();
             }
         }
 
@@ -408,7 +408,7 @@ Object.assign(Controller.prototype, {
                 }
             }
 
-            return _model.playVideo(playReason);
+            return _programController.playVideo(playReason);
         }
 
         function _getReason(meta) {
@@ -471,7 +471,7 @@ Object.assign(Controller.prototype, {
             _model.set('errorEvent', undefined);
 
             const provider = _model.getVideo();
-            _model.stopVideo();
+            _programController.stopVideo();
             if (!provider) {
                 _model.set('state', STATE_IDLE);
             }
@@ -532,7 +532,7 @@ Object.assign(Controller.prototype, {
         }
 
         function _setItem(index) {
-            _model.stopVideo();
+            _programController.stopVideo();
 
             const playlist = _model.get('playlist');
             const length = playlist.length;
@@ -541,18 +541,9 @@ Object.assign(Controller.prototype, {
             index = parseInt(index, 10) || 0;
             index = (index + length) % length;
 
-            _model.set('item', index);
             const item = playlist[index];
 
-            _model.attributes.playlistItem = null;
-            _model.mediaModel.off();
-            _model.mediaModel = new Model.MediaModel();
-            _model.set('minDvrWindow', item.minDvrWindow);
-            _model.set('mediaModel', _model.mediaModel);
-            _model.set('playlistItem', item);
-
             _model.providerPromise = _programController.setActiveItem(item);
-            _model.trigger('itemReady', item);
         }
 
         function _prev(meta) {
@@ -769,6 +760,9 @@ Object.assign(Controller.prototype, {
         this.next = _nextUp;
         this.setConfig = (newConfig) => setConfig(_this, newConfig);
         this.setItemIndex = _setItem;
+
+        // Program passthroughs
+        this.playVideo = _programController.playVideo;
 
         // Model passthroughs
         this.setVolume = _model.setVolume.bind(_model);
