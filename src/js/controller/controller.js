@@ -21,6 +21,7 @@ import { PLAYER_STATE, STATE_BUFFERING, STATE_IDLE, STATE_COMPLETE, STATE_PAUSED
     STATE_STALLED, MEDIA_BEFOREPLAY, PLAYLIST_LOADED, ERROR, PLAYLIST_COMPLETE, CAPTIONS_CHANGED, READY,
     MEDIA_ERROR, MEDIA_COMPLETE, CAST_SESSION, FULLSCREEN, PLAYLIST_ITEM, MEDIA_VOLUME, MEDIA_MUTE, PLAYBACK_RATE_CHANGED,
     CAPTIONS_LIST, CONTROLS, RESIZE } from 'events/events';
+import ProgramController from 'program/program-controller';
 
 // The model stores a different state than the provider
 function normalizeState(newstate) {
@@ -54,6 +55,7 @@ Object.assign(Controller.prototype, {
         _model.setup(config);
         _view = this._view = new View(_api, _model);
         _view.on('all', _triggerAfterReady, _this);
+        const _programController = new ProgramController(_model);
 
         _model.mediaController.on('all', _triggerAfterReady, _this);
         _model.mediaController.on(MEDIA_COMPLETE, () => {
@@ -530,7 +532,27 @@ Object.assign(Controller.prototype, {
         }
 
         function _setItem(index) {
-            return _model.setItemIndex(index);
+            _model.stopVideo();
+
+            const playlist = _model.get('playlist');
+            const length = playlist.length;
+
+            // If looping past the end, or before the beginning
+            index = parseInt(index, 10) || 0;
+            index = (index + length) % length;
+
+            _model.set('item', index);
+            const item = playlist[index];
+
+            _model.attributes.playlistItem = null;
+            _model.mediaModel.off();
+            _model.mediaModel = new Model.MediaModel();
+            _model.set('minDvrWindow', item.minDvrWindow);
+            _model.set('mediaModel', _model.mediaModel);
+            _model.set('playlistItem', item);
+
+            _model.providerPromise = _programController.setActiveItem(item);
+            _model.trigger('itemReady', item);
         }
 
         function _prev(meta) {
@@ -746,6 +768,7 @@ Object.assign(Controller.prototype, {
         this.getState = _getState;
         this.next = _nextUp;
         this.setConfig = (newConfig) => setConfig(_this, newConfig);
+        this.setItemIndex = _setItem;
 
         // Model passthroughs
         this.setVolume = _model.setVolume.bind(_model);

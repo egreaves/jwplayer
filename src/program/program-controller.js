@@ -1,9 +1,13 @@
+import Eventable from 'utils/eventable';
 import ProviderController from 'providers/provider-controller';
 import { resolved } from 'polyfills/promise';
 import getMediaElement from 'api/get-media-element';
+import { PROVIDER_CHANGED } from 'events/events';
 
-export default class ProgramController {
+export default class ProgramController extends Eventable {
     constructor(model) {
+        super();
+
         this.activeProvider = null;
         this.model = model;
         this.providerController = ProviderController(model.getConfiguration());
@@ -43,7 +47,7 @@ export default class ProgramController {
                 // Listening for change:item won't suffice when loading the same index or file
                 // We also can't listen for change:mediaModel because it triggers whether or not
                 // an item was actually loaded
-                this.model.trigger('itemReady', item);
+                return resolved;
             });
     }
 
@@ -57,6 +61,7 @@ export default class ProgramController {
         // Set the Provider after calling init because some Provider properties are only set afterwards
         this.activeProvider = nextProvider;
         this.model.setProvider(nextProvider);
+        this.trigger(PROVIDER_CHANGED, { nextProvider });
 
         return resolved;
     }
@@ -86,7 +91,7 @@ export default class ProgramController {
             return Promise.resolve(ProviderConstructor);
         }
 
-        return this.model.loadProviderList(this.model.get('playlist'))
+        return this.providerController.loadProviders(this.model.get('playlist'))
             .then(() => {
                 ProviderConstructor = this.providerController.choose(source);
                 // The provider we need couldn't be loaded

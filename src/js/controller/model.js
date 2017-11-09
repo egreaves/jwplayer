@@ -13,21 +13,19 @@ import Events from 'utils/backbone.events';
 import { resolved } from 'polyfills/promise';
 import cancelable from 'utils/cancelable';
 import ProviderController from 'providers/provider-controller';
-import ProgramController from 'program/program-controller';
 
 // Represents the state of the player
 const Model = function() {
     const _this = this;
     let providerController;
-    let programController;
     let _provider;
     let _beforecompleted = false;
     let _attached = true;
     let thenPlayPromise = cancelable(function() {});
-    let providerPromise = resolved;
 
     this.mediaController = Object.assign({}, Events);
     this.mediaModel = new MediaModel();
+    this.providerPromise = resolved;
 
     initQoe(this);
 
@@ -36,7 +34,6 @@ const Model = function() {
     this.setup = function(config) {
         Object.assign(this.attributes, config, INITIAL_PLAYER_STATE);
         providerController = ProviderController(this.getConfiguration());
-        programController = new ProgramController(this);
         this.setAutoStart();
         return this;
     };
@@ -246,43 +243,6 @@ const Model = function() {
         }
     };
 
-    // Give the option for a provider to be forced
-    // Used by cast controller
-    this.chooseProvider = function(source) {
-        // if _providers.choose is null, something went wrong in filtering
-        return providerController.choose(source);
-    };
-
-    this.setItemIndex = function(index) {
-        const playlist = this.get('playlist');
-        const length = playlist.length;
-
-        // If looping past the end, or before the beginning
-        index = parseInt(index, 10) || 0;
-        index = (index + length) % length;
-
-        this.set('item', index);
-        thenPlayPromise.cancel();
-
-        const item = playlist[index];
-
-        this.attributes.playlistItem = null;
-        this.mediaModel.off();
-        this.mediaModel = new Model.MediaModel();
-        resetItem(this, item);
-        this.set('minDvrWindow', item.minDvrWindow);
-        this.set('mediaModel', this.mediaModel);
-        this.set('playlistItem', item);
-
-        providerPromise = programController.setActiveItem(item);
-        return providerPromise;
-    };
-
-    this.loadProviderList = function (playlist) {
-        this.set(PLAYER_STATE, STATE_BUFFERING);
-        return providerController.loadProviders(playlist);
-    };
-
     this.getProviders = function() {
         return providerController.allProviders();
     };
@@ -370,7 +330,8 @@ const Model = function() {
             }
             throw new Error('Playback cancelled.');
         });
-        return providerPromise.catch(error => {
+
+        return model.providerPromise.catch(error => {
             thenPlayPromise.cancel();
             // Required provider was not loaded
             model.trigger(ERROR, {
