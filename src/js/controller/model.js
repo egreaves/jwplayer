@@ -402,11 +402,6 @@ const Model = function() {
     this.resetItem = function (item) {
         const position = item ? seconds(item.starttime) : 0;
         const duration = item ? seconds(item.duration) : 0;
-        const mediaModelState = this.mediaModel.attributes;
-        this.mediaModel.srcReset();
-        mediaModelState.position = position;
-        mediaModelState.duration = duration;
-
         this.set('playRejected', false);
         this.set('itemMeta', {});
         this.set('position', position);

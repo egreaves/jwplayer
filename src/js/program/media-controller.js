@@ -1,6 +1,7 @@
 import cancelable from 'utils/cancelable';
 import { resolved } from 'polyfills/promise';
 import SimpleModel from 'model/simplemodel';
+import { seconds } from 'utils/strings';
 
 import { ERROR, MEDIA_PLAY_ATTEMPT, MEDIA_PLAY_ATTEMPT_FAILED, PLAYER_STATE,
     STATE_PAUSED, STATE_BUFFERING, STATE_IDLE } from 'events/events';
@@ -12,14 +13,19 @@ export default class MediaController {
         this.mediaModel = null;
     }
 
-    init() {
-        this.mediaModel = new MediaModel();
+    init(item) {
+        this.provider.init(item);
+        const mediaModel = this.mediaModel = new MediaModel();
+        const position = item ? seconds(item.starttime) : 0;
+        const duration = item ? seconds(item.duration) : 0;
+        const mediaModelState = mediaModel.attributes;
+        mediaModel.srcReset();
+        mediaModelState.position = position;
+        mediaModelState.duration = duration;
     }
 
     playVideo(item, playReason) {
-        const model = this.model;
-        const mediaModel = this.mediaModel;
-        const provider = this.provider;
+        const { model, mediaModel, provider } = this;
 
         if (!playReason) {
             playReason = model.get('playReason');
@@ -40,15 +46,25 @@ export default class MediaController {
     }
 
     stopVideo() {
-
+        this.provider.stop();
     }
 
-    preloadVideo() {
+    preloadVideo(item) {
+        const { mediaModel, provider } = this;
+        if (this.preloaded) {
+            return;
+        }
 
+        provider.preload(item);
+        mediaModel.set('preloaded', true);
     }
 
     get setup() {
         return this.mediaModel.get('setup');
+    }
+
+    get preloaded() {
+        return this.mediaModel.get('preloaded');
     }
 }
 
