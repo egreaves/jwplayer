@@ -544,6 +544,7 @@ Object.assign(Controller.prototype, {
             const item = playlist[index];
 
             _model.providerPromise = _programController.setActiveItem(item);
+            return _model.providerPromise;
         }
 
         function _prev(meta) {
@@ -762,7 +763,7 @@ Object.assign(Controller.prototype, {
         this.setItemIndex = _setItem;
 
         // Program passthroughs
-        this.playVideo = _programController.playVideo;
+        this.playVideo = _programController.playVideo.bind(_programController);
 
         // Model passthroughs
         this.setVolume = _model.setVolume.bind(_model);

@@ -178,13 +178,19 @@ const Model = function() {
 
     this.setActiveItem = function (item) {
         this.attributes.playlistItem = null;
-        this.mediaModel.off();
-        this.mediaModel = new Model.MediaModel();
         this.set('item', _.indexOf(this.get('playlist'), item));
         this.set('minDvrWindow', item.minDvrWindow);
-        this.set('mediaModel', this.mediaModel);
         this.set('playlistItem', item);
         this.trigger('itemReady', item);
+    };
+
+    this.setMediaModel = function (mediaModel) {
+        if (this.mediaModel) {
+            this.mediaModel.off();
+        }
+
+        this.mediaModel = mediaModel;
+        this.set('mediaModel', mediaModel);
     };
 
     this.setCurrentAudioTrack = function(currentTrack, tracks) {

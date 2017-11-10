@@ -3,6 +3,7 @@ import ProviderController from 'providers/provider-controller';
 import { resolved } from 'polyfills/promise';
 import getMediaElement from 'api/get-media-element';
 import cancelable from 'utils/cancelable';
+import MediaController from 'program/media-controller';
 
 import { ERROR, MEDIA_PLAY_ATTEMPT, MEDIA_PLAY_ATTEMPT_FAILED, PLAYER_STATE, STATE_PAUSED, STATE_BUFFERING } from 'events/events';
 
@@ -16,6 +17,7 @@ export default class ProgramController extends Eventable {
         this.thenPlayPromise = cancelable(() => {});
         // The providerPromise will resolve with undefined or the active provider
         this.providerPromise = resolved;
+        this.mediaController = null;
     }
 
     setActiveItem(item) {
@@ -38,6 +40,7 @@ export default class ProgramController extends Eventable {
             this.activeProvider = null;
             replaceMediaElement(model);
             model.set(PLAYER_STATE, STATE_BUFFERING);
+            this.mediaController = null;
         }
 
         const mediaModelContext = model.mediaModel;
@@ -55,6 +58,14 @@ export default class ProgramController extends Eventable {
                     return Promise.resolve(this.activeProvider);
                 }
                 return resolved;
+            })
+            .then(nextProvider => {
+                if (!this.mediaController) {
+                    this.mediaController = new MediaController(nextProvider, model);
+                }
+                this.mediaController.init();
+                model.setMediaModel(this.mediaController.mediaModel);
+                return this.mediaController;
             });
 
         return this.providerPromise;
@@ -110,6 +121,31 @@ export default class ProgramController extends Eventable {
     }
 
     playVideo(playReason) {
+        const model = this.model;
+        const mediaController = this.mediaController;
+        const item = model.get('playlistItem');
+        let playPromise;
+
+        if (!item) {
+            return;
+        }
+
+        if (!playReason) {
+            playReason = model.get('playReason');
+        }
+
+        if (mediaController && mediaController.setup) {
+            mediaController.playVideo(item, playReason);
+        } else {
+            playPromise = this.providerPromise.then((nextMediaController) => {
+                nextMediaController.playVideo(item, playReason);
+            });
+        }
+
+        return playPromise;
+    }
+
+    _playVideo(playReason) {
         const model = this.model;
         const activeProvider = this.activeProvider;
         let playPromise;
