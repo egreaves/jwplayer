@@ -3,7 +3,7 @@ import { resolved } from 'polyfills/promise';
 import SimpleModel from 'model/simplemodel';
 import { seconds } from 'utils/strings';
 
-import { ERROR, MEDIA_PLAY_ATTEMPT, MEDIA_PLAY_ATTEMPT_FAILED, PLAYER_STATE,
+import { MEDIA_PLAY_ATTEMPT, MEDIA_PLAY_ATTEMPT_FAILED, PLAYER_STATE,
     STATE_PAUSED, STATE_BUFFERING, STATE_IDLE } from 'events/events';
 
 export default class MediaController {
