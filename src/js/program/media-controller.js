@@ -59,6 +59,17 @@ export default class MediaController {
         mediaModel.set('preloaded', true);
     }
 
+    destroy() {
+        const { provider, model } = this;
+
+        provider.off(null, null, model);
+        if (provider.getContainer()) {
+            provider.remove();
+        }
+        delete provider.instreamMode;
+        this.provider = null;
+    }
+
     get setup() {
         return this.mediaModel.get('setup');
     }

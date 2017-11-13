@@ -2,10 +2,9 @@ import { Browser, OS } from 'environment/environment';
 import SimpleModel from 'model/simplemodel';
 import { INITIAL_PLAYER_STATE } from 'model/player-model';
 import initQoe from 'controller/qoe';
-import { PLAYER_STATE, STATE_IDLE, STATE_BUFFERING, STATE_PAUSED, STATE_COMPLETE, MEDIA_VOLUME, MEDIA_MUTE,
+import { PLAYER_STATE, STATE_IDLE, STATE_COMPLETE, MEDIA_VOLUME, MEDIA_MUTE,
     MEDIA_TYPE, PROVIDER_CHANGED, AUDIO_TRACKS, AUDIO_TRACK_CHANGED,
-    MEDIA_PLAY_ATTEMPT, MEDIA_PLAY_ATTEMPT_FAILED, MEDIA_RATE_CHANGE,
-    MEDIA_BUFFER, MEDIA_TIME, MEDIA_LEVELS, MEDIA_LEVEL_CHANGED, MEDIA_ERROR, ERROR,
+    MEDIA_RATE_CHANGE, MEDIA_BUFFER, MEDIA_TIME, MEDIA_LEVELS, MEDIA_LEVEL_CHANGED, MEDIA_ERROR,
     MEDIA_BEFORECOMPLETE, MEDIA_COMPLETE, MEDIA_META } from 'events/events';
 import _ from 'utils/underscore';
 import Events from 'utils/backbone.events';

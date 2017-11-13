@@ -5,25 +5,23 @@ import getMediaElement from 'api/get-media-element';
 import cancelable from 'utils/cancelable';
 import MediaController from 'program/media-controller';
 
-import { ERROR, MEDIA_PLAY_ATTEMPT, MEDIA_PLAY_ATTEMPT_FAILED, PLAYER_STATE, STATE_PAUSED, STATE_BUFFERING } from 'events/events';
+import { PLAYER_STATE, STATE_BUFFERING } from 'events/events';
 
 export default class ProgramController extends Eventable {
     constructor(model) {
         super();
 
-        this.activeProvider = null;
+        this.mediaController = null;
         this.model = model;
         this.providerController = ProviderController(model.getConfiguration());
         this.thenPlayPromise = cancelable(() => {});
-        // The providerPromise will resolve with undefined or the active provider
         this.providerPromise = resolved;
-        this.mediaController = null;
     }
 
     setActiveItem(item) {
+        const { mediaController, model } = this;
         this.thenPlayPromise.cancel();
 
-        const model = this.model;
         model.setActiveItem(item);
         model.resetItem(item);
 
@@ -33,14 +31,14 @@ export default class ProgramController extends Eventable {
             throw new Error('No media');
         }
 
-        if (this.activeProvider && !this.providerController.canPlay(this.activeProvider, source)) {
+        if (mediaController && !this.providerController.canPlay(mediaController.provider, source)) {
             // If we can't play the source with the current provider, reset the current one and
             // prime the next tag within the gesture
-            resetProvider(this.activeProvider, model);
-            this.activeProvider = null;
-            replaceMediaElement(model);
-            model.set(PLAYER_STATE, STATE_BUFFERING);
+            this.mediaController.destroy();
             this.mediaController = null;
+            model.resetProvider();
+            model.set(PLAYER_STATE, STATE_BUFFERING);
+            replaceMediaElement(model);
         }
 
         const mediaModelContext = model.mediaModel;
@@ -48,16 +46,14 @@ export default class ProgramController extends Eventable {
             .then((ProviderConstructor) => {
                 // Don't do anything if we've tried to load another provider while this promise was resolving
                 if (mediaModelContext === model.mediaModel) {
-                    let nextProvider = this.activeProvider;
+                    let nextProvider = mediaController && mediaController.provider;
                     // Make a new provider if we don't already have one
                     if (!nextProvider) {
-                        // We need to make a new provider
                         nextProvider = new ProviderConstructor(model.get('id'), model.getConfiguration());
                         this.changeVideoProvider(nextProvider);
                         this.mediaController = new MediaController(nextProvider, model);
                     }
                     // Initialize the provider and mediaModel, sync it with the Model
-                    this.activeProvider = nextProvider;
                     this.model.setProvider(nextProvider);
                     this.mediaController.init(item);
                     model.setMediaModel(this.mediaController.mediaModel);
@@ -71,36 +67,42 @@ export default class ProgramController extends Eventable {
     }
 
     changeVideoProvider(nextProvider) {
-        this.model.off('change:mediaContainer', this.model.onMediaContainer);
+        const { model, providerController } = this;
+        model.off('change:mediaContainer', model.onMediaContainer);
 
-        const container = this.model.get('mediaContainer');
+        const container = model.get('mediaContainer');
         if (container) {
             nextProvider.setContainer(container);
         } else {
-            this.model.once('change:mediaContainer', this.model.onMediaContainer);
+            model.once('change:mediaContainer', model.onMediaContainer);
         }
 
-        // TODO: Split this into the mediaController
-        nextProvider.on('all', this.model.videoEventHandler, this.model);
+        // TODO: Split into the mediaController
+        nextProvider.on('all', model.videoEventHandler, model);
         // Attempt setting the playback rate to be the user selected value
-        this.model.setPlaybackRate(this.model.get('defaultPlaybackRate'));
-        this.providerController.sync(this.model, nextProvider);
+        model.setPlaybackRate(model.get('defaultPlaybackRate'));
+        providerController.sync(model, nextProvider);
     }
 
     loadProviderConstructor(source) {
-        let ProviderConstructor = this.providerController.choose(source);
+        const { model, mediaController, providerController } = this;
+
+        let ProviderConstructor = providerController.choose(source);
         if (ProviderConstructor) {
             return Promise.resolve(ProviderConstructor);
         }
 
-        return this.providerController.loadProviders(this.model.get('playlist'))
+        return providerController.loadProviders(model.get('playlist'))
             .then(() => {
-                ProviderConstructor = this.providerController.choose(source);
+                ProviderConstructor = providerController.choose(source);
                 // The provider we need couldn't be loaded
                 if (!ProviderConstructor) {
-                    resetProvider(this.activeProvider, this.model);
-                    this.activeProvider = null;
-                    this.model.set('provider', undefined);
+                    if (mediaController) {
+                        mediaController.destroy();
+                        model.resetProvider();
+                        this.mediaController = null;
+                    }
+                    model.set('provider', undefined);
                     throw new Error('No providers for playlist');
                 }
                 return ProviderConstructor;
@@ -132,15 +134,15 @@ export default class ProgramController extends Eventable {
     }
 
     stopVideo() {
+        const { mediaController, model } = this;
         this.thenPlayPromise.cancel();
 
-        const model = this.model;
         const item = model.get('playlist')[model.get('item')];
         model.attributes.playlistItem = item;
         model.resetItem(item);
 
-        if (this.mediaController) {
-            this.mediaController.stopVideo();
+        if (mediaController) {
+            mediaController.stopVideo();
         }
     }
 
@@ -158,7 +160,7 @@ export default class ProgramController extends Eventable {
             model.get('autostart') === false &&
             !mediaController.setup &&
             !mediaController.preloaded) {
-            this.mediaController.preloadVideo(item);
+            mediaController.preloadVideo(item);
         }
     }
 }
@@ -179,14 +181,4 @@ function replaceMediaElement(model) {
     mediaElement.load();
 }
 
-const resetProvider = (provider, model) => {
-    if (provider) {
-        provider.off(null, null, model);
-        if (provider.getContainer()) {
-            provider.remove();
-        }
-        delete provider.instreamMode;
-    }
-    model.resetProvider();
-};
 
