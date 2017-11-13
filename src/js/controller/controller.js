@@ -764,6 +764,7 @@ Object.assign(Controller.prototype, {
 
         // Program passthroughs
         this.playVideo = _programController.playVideo.bind(_programController);
+        this.stopVideo = _programController.stopVideo.bind(_programController);
 
         // Model passthroughs
         this.setVolume = _model.setVolume.bind(_model);

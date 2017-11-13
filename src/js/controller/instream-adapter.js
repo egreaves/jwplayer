@@ -299,7 +299,7 @@ var InstreamAdapter = function(_controller, _model, _view) {
             _controller.attachMedia();
 
             if (_oldpos === null) {
-                _model.stopVideo();
+                _controller.stopVideo();
             } else {
                 const mediaModelContext = _model.mediaModel;
                 const item = Object.assign({}, _olditem);

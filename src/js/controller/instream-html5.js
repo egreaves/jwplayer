@@ -4,11 +4,13 @@ import { OS } from 'environment/environment';
 import Events from 'utils/backbone.events';
 import changeStateEvent from 'events/change-state-event';
 import Model from 'controller/model';
+import ProgramController from 'program/program-controller';
 
 const InstreamHtml5 = function(_controller, _model) {
     var _adModel;
     var _currentProvider;
     var _this = Object.assign(this, Events);
+    let _programController;
 
     // Listen for player resize events
     _controller.on(FULLSCREEN, function(data) {
@@ -54,25 +56,22 @@ const InstreamHtml5 = function(_controller, _model) {
         mediaElement.addEventListener('abort', _this.srcReset);
         mediaElement.addEventListener('emptied', _this.srcReset);
         this._adModel = _adModel;
+        _programController = new ProgramController(_adModel);
     };
 
     /** Load an instream item and initialize playback **/
-    _this.load = function() {
+    _this.load = function(item) {
         // Let the player media model know we're using it's video tag
         _this.srcReset();
 
         // Make sure it chooses a provider
-        _adModel.stopVideo();
-        _adModel.setItemIndex(0).then(() => {
-            if (!_adModel) {
-                return;
-            }
-            _checkProvider(_adModel.getVideo());
-        });
+        _programController.stopVideo();
         _checkProvider();
-
-        // Load the instream item
-        return _adModel.playVideo();
+        _programController.setActiveItem(item)
+            .then(() => {
+                _checkProvider(_adModel.getVideo());
+            });
+        return _programController.playVideo();
     };
 
     _this.applyProviderListeners = function(provider) {

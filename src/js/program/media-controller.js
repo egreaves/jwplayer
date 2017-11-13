@@ -24,6 +24,10 @@ export default class MediaController {
         mediaModelState.duration = duration;
     }
 
+    reset() {
+        this.mediaModel = null;
+    }
+
     playVideo(item, playReason) {
         const { model, mediaModel, provider } = this;
 

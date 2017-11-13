@@ -19,7 +19,8 @@ export default class ProgramController extends Eventable {
     }
 
     setActiveItem(item) {
-        const { mediaController, model } = this;
+        const { mediaController } = this;
+        const model = this.model;
         this.thenPlayPromise.cancel();
 
         model.setActiveItem(item);
@@ -39,6 +40,11 @@ export default class ProgramController extends Eventable {
             model.resetProvider();
             model.set(PLAYER_STATE, STATE_BUFFERING);
             replaceMediaElement(model);
+        } else if (mediaController) {
+            // We can reuse the current mediaController
+            // Reset it so that a play call before the providerPromise resolves doesn't cause problems
+            // Any play calls will wait for the mediaController to setup again before calling play
+            this.mediaController.reset();
         }
 
         const mediaModelContext = model.mediaModel;
@@ -54,9 +60,10 @@ export default class ProgramController extends Eventable {
                         this.mediaController = new MediaController(nextProvider, model);
                     }
                     // Initialize the provider and mediaModel, sync it with the Model
-                    this.model.setProvider(nextProvider);
+                    // This sets up the mediaController and allows playback to begin
                     this.mediaController.init(item);
                     model.setMediaModel(this.mediaController.mediaModel);
+                    this.model.setProvider(nextProvider);
                     syncPlayerWithMediaModel(this.model.get('mediaModel'));
 
                     return Promise.resolve(this.mediaController);
@@ -122,9 +129,11 @@ export default class ProgramController extends Eventable {
             playReason = model.get('playReason');
         }
 
+        // Setup means that we've already started playback on the current item; all we need to do is resume it
         if (mediaController && mediaController.setup) {
             playPromise = mediaController.playVideo(item, playReason);
         } else {
+            // Wait for the provider to load before starting inital playback
             playPromise = this.providerPromise.then((nextMediaController) => {
                 nextMediaController.playVideo(item, playReason);
             });
