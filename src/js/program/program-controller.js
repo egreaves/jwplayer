@@ -1,4 +1,3 @@
-import Eventable from 'utils/eventable';
 import ProviderController from 'providers/provider-controller';
 import { resolved } from 'polyfills/promise';
 import getMediaElement from 'api/get-media-element';
@@ -7,10 +6,8 @@ import MediaController from 'program/media-controller';
 
 import { PLAYER_STATE, STATE_BUFFERING } from 'events/events';
 
-export default class ProgramController extends Eventable {
+export default class ProgramController {
     constructor(model) {
-        super();
-
         this.mediaController = null;
         this.model = model;
         this.providerController = ProviderController(model.getConfiguration());
@@ -58,12 +55,12 @@ export default class ProgramController extends Eventable {
                         nextProvider = new ProviderConstructor(model.get('id'), model.getConfiguration());
                         this.changeVideoProvider(nextProvider);
                         this.mediaController = new MediaController(nextProvider, model);
+                        this.model.setProvider(nextProvider);
                     }
                     // Initialize the provider and mediaModel, sync it with the Model
                     // This sets up the mediaController and allows playback to begin
                     this.mediaController.init(item);
                     model.setMediaModel(this.mediaController.mediaModel);
-                    this.model.setProvider(nextProvider);
                     syncPlayerWithMediaModel(this.model.get('mediaModel'));
 
                     return Promise.resolve(this.mediaController);
@@ -74,7 +71,7 @@ export default class ProgramController extends Eventable {
     }
 
     changeVideoProvider(nextProvider) {
-        const { model, providerController } = this;
+        const { model } = this;
         model.off('change:mediaContainer', model.onMediaContainer);
 
         const container = model.get('mediaContainer');
@@ -88,7 +85,6 @@ export default class ProgramController extends Eventable {
         nextProvider.on('all', model.videoEventHandler, model);
         // Attempt setting the playback rate to be the user selected value
         model.setPlaybackRate(model.get('defaultPlaybackRate'));
-        providerController.sync(model, nextProvider);
     }
 
     loadProviderConstructor(source) {

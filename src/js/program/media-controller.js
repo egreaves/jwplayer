@@ -75,7 +75,7 @@ export default class MediaController {
     }
 
     get setup() {
-        return this.mediaModel.get('setup');
+        return this.mediaModel && this.mediaModel.get('setup');
     }
 
     get preloaded() {
@@ -156,3 +156,5 @@ Object.assign(MediaModel.prototype, SimpleModel, {
         attributes.visualQuality = null;
     }
 });
+
+

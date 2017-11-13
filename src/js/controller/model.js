@@ -303,7 +303,7 @@ const Model = function() {
 
     this.setProvider = function (provider) {
         _provider = provider;
-        this.set('provider', provider.getName());
+        syncProviderProperties(this, provider);
     };
 
     this.resetProvider = function () {
@@ -406,6 +406,26 @@ const Model = function() {
         this.set('position', position);
         this.set('duration', duration);
     };
+};
+
+const syncProviderProperties = (model, provider) => {
+    model.set('provider', provider.getName());
+
+    provider.volume(model.get('volume'));
+    // Mute the video if autostarting on mobile, except for Android SDK. Otherwise, honor the model's mute value
+    const isAndroidSdk = model.get('sdkplatform') === 1;
+    provider.mute((model.autoStartOnMobile() && !isAndroidSdk) || model.get('mute'));
+    if (model.get('instreamMode') === true) {
+        provider.instreamMode = true;
+    }
+
+    if (provider.getName().name.indexOf('flash') === -1) {
+        model.set('flashThrottle', undefined);
+        model.set('flashBlocked', false);
+    }
+    // Set playbackRate because provider support for playbackRate may have changed and not sent an update
+    model.set('playbackRate', provider.getPlaybackRate());
+    model.set('renderCaptionsNatively', provider.renderNatively);
 };
 
 // Represents the state of the provider/media element
