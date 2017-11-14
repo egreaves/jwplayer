@@ -106,15 +106,14 @@ export default class ProgramController {
         if (!mediaController) {
             return;
         }
-        // TODO: attach/detach logic
-        // let _attached = false;
+
         const item = model.get('playlistItem');
-        // Only attempt to preload if media is attached and hasn't been loaded
-        if (model.get('state') === 'idle' &&
-            item.preload !== 'none' &&
-            model.get('autostart') === false &&
-            !mediaController.setup &&
-            !mediaController.preloaded) {
+        if (!item || (item && item.preload === 'none')) {
+            return;
+        }
+
+        // Only attempt to preload if media hasn't been loaded and we haven't started
+        if (model.get('state') === 'idle' && model.get('autostart') === false && !mediaController.setup) {
             mediaController.preloadVideo(item);
         }
     }
