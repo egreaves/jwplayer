@@ -14,6 +14,7 @@ export default class MediaController {
     }
 
     init(item) {
+        const { model } = this;
         this.provider.init(item);
         const mediaModel = this.mediaModel = new MediaModel();
         const position = item ? seconds(item.starttime) : 0;
@@ -22,6 +23,7 @@ export default class MediaController {
         mediaModel.srcReset();
         mediaModelState.position = position;
         mediaModelState.duration = duration;
+        model.setMediaModel(mediaModel);
     }
 
     reset() {

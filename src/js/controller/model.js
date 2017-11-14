@@ -190,6 +190,7 @@ const Model = function() {
 
         this.mediaModel = mediaModel;
         this.set('mediaModel', mediaModel);
+        syncPlayerWithMediaModel(mediaModel);
     };
 
     this.setCurrentAudioTrack = function(currentTrack, tracks) {
@@ -427,6 +428,12 @@ const syncProviderProperties = (model, provider) => {
     model.set('playbackRate', provider.getPlaybackRate());
     model.set('renderCaptionsNatively', provider.renderNatively);
 };
+
+function syncPlayerWithMediaModel(mediaModel) {
+    // Sync player state with mediaModel state
+    const mediaState = mediaModel.get('state');
+    mediaModel.trigger('change:state', mediaModel, mediaState, mediaState);
+}
 
 // Represents the state of the provider/media element
 const MediaModel = Model.MediaModel = function() {

@@ -25,10 +25,6 @@ export default function ProviderController(initialConfig) {
         },
         allProviders() {
             return providers;
-        },
-        updateConfig(updatedConfig) {
-            providers = new Providers(updatedConfig);
-            config = updatedConfig;
         }
     };
 }

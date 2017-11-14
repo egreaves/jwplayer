@@ -32,11 +32,7 @@ export default class ProgramController {
         if (mediaController && !this.providerController.canPlay(mediaController.provider, source)) {
             // If we can't play the source with the current provider, reset the current one and
             // prime the next tag within the gesture
-            this.mediaController.destroy();
-            this.mediaController = null;
-            model.resetProvider();
-            model.set(PLAYER_STATE, STATE_BUFFERING);
-            replaceMediaElement(model);
+            this._destroyActiveMedia();
         } else if (mediaController) {
             // We can reuse the current mediaController
             // Reset it so that a play call before the providerPromise resolves doesn't cause problems
@@ -45,7 +41,7 @@ export default class ProgramController {
         }
 
         const mediaModelContext = model.mediaModel;
-        this.providerPromise = this.loadProviderConstructor(source)
+        this.providerPromise = this._loadProviderConstructor(source)
             .then((ProviderConstructor) => {
                 // Don't do anything if we've tried to load another provider while this promise was resolving
                 if (mediaModelContext === model.mediaModel) {
@@ -53,63 +49,17 @@ export default class ProgramController {
                     // Make a new provider if we don't already have one
                     if (!nextProvider) {
                         nextProvider = new ProviderConstructor(model.get('id'), model.getConfiguration());
-                        this.changeVideoProvider(nextProvider);
-                        this.mediaController = new MediaController(nextProvider, model);
-                        this.model.setProvider(nextProvider);
+                        this._changeVideoProvider(nextProvider);
                     }
                     // Initialize the provider and mediaModel, sync it with the Model
                     // This sets up the mediaController and allows playback to begin
                     this.mediaController.init(item);
-                    model.setMediaModel(this.mediaController.mediaModel);
-                    syncPlayerWithMediaModel(this.model.get('mediaModel'));
 
                     return Promise.resolve(this.mediaController);
                 }
                 return resolved;
             });
         return this.providerPromise;
-    }
-
-    changeVideoProvider(nextProvider) {
-        const { model } = this;
-        model.off('change:mediaContainer', model.onMediaContainer);
-
-        const container = model.get('mediaContainer');
-        if (container) {
-            nextProvider.setContainer(container);
-        } else {
-            model.once('change:mediaContainer', model.onMediaContainer);
-        }
-
-        // TODO: Split into the mediaController
-        nextProvider.on('all', model.videoEventHandler, model);
-        // Attempt setting the playback rate to be the user selected value
-        model.setPlaybackRate(model.get('defaultPlaybackRate'));
-    }
-
-    loadProviderConstructor(source) {
-        const { model, mediaController, providerController } = this;
-
-        let ProviderConstructor = providerController.choose(source);
-        if (ProviderConstructor) {
-            return Promise.resolve(ProviderConstructor);
-        }
-
-        return providerController.loadProviders(model.get('playlist'))
-            .then(() => {
-                ProviderConstructor = providerController.choose(source);
-                // The provider we need couldn't be loaded
-                if (!ProviderConstructor) {
-                    if (mediaController) {
-                        mediaController.destroy();
-                        model.resetProvider();
-                        this.mediaController = null;
-                    }
-                    model.set('provider', undefined);
-                    throw new Error('No providers for playlist');
-                }
-                return ProviderConstructor;
-            });
     }
 
     playVideo(playReason) {
@@ -168,12 +118,71 @@ export default class ProgramController {
             mediaController.preloadVideo(item);
         }
     }
-}
 
-function syncPlayerWithMediaModel(mediaModel) {
-    // Sync player state with mediaModel state
-    const mediaState = mediaModel.get('state');
-    mediaModel.trigger('change:state', mediaModel, mediaState, mediaState);
+    castVideo(castProvider, item) {
+        this._changeVideoProvider(castProvider);
+        this.mediaController.init(item);
+    }
+
+    stopCast() {
+        this.stopVideo();
+        this.mediaController = null;
+    }
+
+    _changeVideoProvider(nextProvider) {
+        const { model } = this;
+        model.off('change:mediaContainer', model.onMediaContainer);
+
+        const container = model.get('mediaContainer');
+        if (container) {
+            nextProvider.setContainer(container);
+        } else {
+            model.once('change:mediaContainer', model.onMediaContainer);
+        }
+
+        // TODO: Split into the mediaController
+        nextProvider.on('all', model.videoEventHandler, model);
+        // Attempt setting the playback rate to be the user selected value
+        model.setPlaybackRate(model.get('defaultPlaybackRate'));
+
+        this.mediaController = new MediaController(nextProvider, model);
+        model.setProvider(nextProvider);
+    }
+
+    _loadProviderConstructor(source) {
+        const { model, mediaController, providerController } = this;
+
+        let ProviderConstructor = providerController.choose(source);
+        if (ProviderConstructor) {
+            return Promise.resolve(ProviderConstructor);
+        }
+
+        return providerController.loadProviders(model.get('playlist'))
+            .then(() => {
+                ProviderConstructor = providerController.choose(source);
+                // The provider we need couldn't be loaded
+                if (!ProviderConstructor) {
+                    if (mediaController) {
+                        mediaController.destroy();
+                        model.resetProvider();
+                        this.mediaController = null;
+                    }
+                    model.set('provider', undefined);
+                    throw new Error('No providers for playlist');
+                }
+                return ProviderConstructor;
+            });
+    }
+
+    _destroyActiveMedia() {
+        const { model } = this;
+
+        this.mediaController.destroy();
+        this.mediaController = null;
+        model.resetProvider();
+        model.set(PLAYER_STATE, STATE_BUFFERING);
+        replaceMediaElement(model);
+    }
 }
 
 function replaceMediaElement(model) {
