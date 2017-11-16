@@ -4,27 +4,24 @@ import getMediaElement from 'api/get-media-element';
 import cancelable from 'utils/cancelable';
 import MediaController from 'program/media-controller';
 
-import { PLAYER_STATE, STATE_BUFFERING, STATE_IDLE } from 'events/events';
+import { ERROR, PLAYER_STATE, STATE_BUFFERING, STATE_IDLE } from 'events/events';
 
 export default class ProgramController {
     constructor(model) {
         this.mediaController = null;
         this.model = model;
         this.providerController = ProviderController(model.getConfiguration());
-        this.thenPlayPromise = cancelable(() => {});
         this.providerPromise = resolved;
     }
 
     setActiveItem(item, index) {
         const { mediaController, model } = this;
-        this.thenPlayPromise.cancel();
 
         model.setActiveItem(item, index);
 
         const source = item && item.sources && item.sources[0];
         if (source === undefined) {
-            // source is undefined when resetting index with empty playlist
-            throw new Error('No media');
+            return Promise.reject('No media');
         }
 
         if (mediaController) {
@@ -56,8 +53,7 @@ export default class ProgramController {
                     // Initialize the provider and mediaModel, sync it with the Model
                     // This sets up the mediaController and allows playback to begin
                     this.mediaController.init(item);
-
-                    return Promise.resolve(this.mediaController);
+                    return resolved(this.mediaController);
                 }
                 return resolved;
             });
@@ -78,13 +74,14 @@ export default class ProgramController {
         }
 
         // Setup means that we've already started playback on the current item; all we need to do is resume it
-        if (mediaController && mediaController.setup) {
+        if (mediaController) {
             playPromise = mediaController.play(item, playReason);
         } else {
             // Wait for the provider to load before starting initial playback
-            playPromise = this.providerPromise.then((nextMediaController) => {
+            const thenPlayPromise = model.thenPlayPromise = cancelable((nextMediaController) => {
                 nextMediaController.play(item, playReason);
             });
+            playPromise = this.providerPromise.then(thenPlayPromise);
         }
 
         return playPromise;
@@ -92,7 +89,6 @@ export default class ProgramController {
 
     stopVideo() {
         const { mediaController, model } = this;
-        this.thenPlayPromise.cancel();
 
         const item = model.get('playlist')[model.get('item')];
         model.attributes.playlistItem = item;
@@ -178,8 +174,11 @@ export default class ProgramController {
                         model.resetProvider();
                         this.mediaController = null;
                     }
-                    model.set('provider', undefined);
-                    throw new Error('No providers for playlist');
+                    const message = 'Could not load provider for playlist';
+                    model.trigger(ERROR, {
+                        message
+                    });
+                    throw Error(message);
                 }
                 return ProviderConstructor;
             });

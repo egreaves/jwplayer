@@ -1,6 +1,6 @@
 import cancelable from 'utils/cancelable';
 import { resolved } from 'polyfills/promise';
-import SimpleModel from 'model/simplemodel';
+import { MediaModel } from 'controller/model';
 import { seconds } from 'utils/strings';
 
 import { MEDIA_PLAY_ATTEMPT, MEDIA_PLAY_ATTEMPT_FAILED, PLAYER_STATE,
@@ -11,6 +11,7 @@ export default class MediaController {
         this.provider = provider;
         this.model = model;
         this.mediaModel = null;
+        this.thenPlayPromise = cancelable(() => {});
     }
 
     init(item) {
@@ -44,7 +45,7 @@ export default class MediaController {
         if (mediaModel.get('setup')) {
             playPromise = provider.play();
         } else {
-            playPromise = loadAndPlay(item, provider);
+            playPromise = loadAndPlay(item, provider, model);
             mediaModel.set('setup', true);
             if (!mediaModel.get('started')) {
                 playAttempt(playPromise, model, playReason, provider);
@@ -54,7 +55,8 @@ export default class MediaController {
     }
 
     stop() {
-        this.provider.stop();
+        const { provider } = this;
+        provider.stop();
     }
 
     pause() {
@@ -129,11 +131,11 @@ export default class MediaController {
     }
 }
 
-function loadAndPlay(item, provider) {
+function loadAndPlay(item, provider, model) {
     // Calling load() on Shaka may return a player setup promise
     const providerSetupPromise = provider.load(item);
     if (providerSetupPromise) {
-        const thenPlayPromise = cancelable(() => {
+        const thenPlayPromise = model.thenPlayPromise = cancelable(() => {
             return provider.play() || resolved;
         });
         return providerSetupPromise.then(thenPlayPromise.async);
@@ -185,23 +187,5 @@ function syncPlayerWithMediaModel(mediaModel) {
     const mediaState = mediaModel.get('state');
     mediaModel.trigger('change:state', mediaModel, mediaState, mediaState);
 }
-
-// Represents the state of the provider/media element
-const MediaModel = function() {
-    this.attributes = {
-        state: STATE_IDLE
-    };
-};
-
-Object.assign(MediaModel.prototype, SimpleModel, {
-    srcReset() {
-        const attributes = this.attributes;
-        attributes.setup = false;
-        attributes.started = false;
-        attributes.state = STATE_IDLE;
-        attributes.preloaded = false;
-        attributes.visualQuality = null;
-    }
-});
 
 

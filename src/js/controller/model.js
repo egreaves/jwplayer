@@ -84,6 +84,7 @@ const Model = function() {
                 return;
             case PLAYER_STATE: {
                 if (data.newstate === STATE_IDLE) {
+                    // TODO: cancel promise in PC
                     thenPlayPromise.cancel();
                     mediaModel.srcReset();
                 }
@@ -98,6 +99,7 @@ const Model = function() {
                 //  Instead letting the master controller do so
                 return;
             case MEDIA_ERROR:
+                // TODO: cancel promise in PC
                 thenPlayPromise.cancel();
                 mediaModel.srcReset();
                 break;
@@ -208,6 +210,7 @@ const Model = function() {
     };
 
     this.detachMedia = function() {
+        // TODO: cancel promise in PC
         thenPlayPromise.cancel();
         _attached = false;
         if (_provider) {
@@ -449,4 +452,5 @@ Object.assign(MediaModel.prototype, SimpleModel, {
 
 Object.assign(Model.prototype, SimpleModel);
 
+export { MediaModel };
 export default Model;
