@@ -14,8 +14,9 @@ export default class MediaController {
     }
 
     init(item) {
-        const { model } = this;
-        this.provider.init(item);
+        const { model, provider } = this;
+        provider.init(item);
+        provider.setState(STATE_IDLE);
         const mediaModel = this.mediaModel = new MediaModel();
         const position = item ? seconds(item.starttime) : 0;
         const duration = item ? seconds(item.duration) : 0;
@@ -23,6 +24,7 @@ export default class MediaController {
         mediaModel.srcReset();
         mediaModelState.position = position;
         mediaModelState.duration = duration;
+        model.setProvider(provider);
         model.setMediaModel(mediaModel);
     }
 
@@ -30,7 +32,7 @@ export default class MediaController {
         this.mediaModel = null;
     }
 
-    playVideo(item, playReason) {
+    play(item, playReason) {
         const { model, mediaModel, provider } = this;
 
         if (!playReason) {
@@ -51,11 +53,15 @@ export default class MediaController {
         return playPromise;
     }
 
-    stopVideo() {
+    stop() {
         this.provider.stop();
     }
 
-    preloadVideo(item) {
+    pause() {
+        this.provider.pause();
+    }
+
+    preload(item) {
         const { mediaModel, provider } = this;
         if (this.preloaded) {
             return;
@@ -76,12 +82,50 @@ export default class MediaController {
         this.provider = null;
     }
 
-    get setup() {
-        return this.mediaModel && this.mediaModel.get('setup');
+    get audioTrack() {
+        return this.provider.getCurrentAudioTrack();
+    }
+
+    get quality() {
+        return this.provider.getCurrentQuality();
+    }
+
+    get audioTracks() {
+        return this.provider.getAudioTracks();
     }
 
     get preloaded() {
         return this.mediaModel.get('preloaded');
+    }
+
+    get qualities() {
+        return this.provider.getQualityLevels();
+    }
+
+    get setup() {
+        return this.mediaModel && this.mediaModel.get('setup');
+    }
+
+    set audioTrack(index) {
+        this.provider.setCurrentAudioTrack(index);
+    }
+
+    set controls(mode) {
+        this.provider.setControls(mode);
+    }
+
+    set position(pos) {
+        this.provider.seek(pos);
+    }
+
+    set quality(index) {
+        this.provider.setCurrentQuality(index);
+    }
+
+    set subtitles(index) {
+        if (this.provider.setSubtitlesTrack) {
+            this.provider.setSubtitlesTrack(index);
+        }
     }
 }
 
@@ -154,6 +198,7 @@ Object.assign(MediaModel.prototype, SimpleModel, {
         const attributes = this.attributes;
         attributes.setup = false;
         attributes.started = false;
+        attributes.state = STATE_IDLE;
         attributes.preloaded = false;
         attributes.visualQuality = null;
     }

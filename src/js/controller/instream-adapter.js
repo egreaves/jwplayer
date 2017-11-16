@@ -198,7 +198,7 @@ var InstreamAdapter = function(_controller, _model, _view) {
 
         adModel.set('skipButton', false);
 
-        const playPromise = _instream.load(item);
+        const playPromise = _instream.load(item, _arrayIndex);
 
         const skipoffset = item.skipoffset || _options.skipoffset;
         if (skipoffset) {

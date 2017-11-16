@@ -8,7 +8,6 @@ import { PLAYER_STATE, STATE_IDLE, STATE_COMPLETE, MEDIA_VOLUME, MEDIA_MUTE,
     MEDIA_BEFORECOMPLETE, MEDIA_COMPLETE, MEDIA_META } from 'events/events';
 import _ from 'utils/underscore';
 import Events from 'utils/backbone.events';
-import { resolved } from 'polyfills/promise';
 import cancelable from 'utils/cancelable';
 import ProviderController from 'providers/provider-controller';
 import { seconds } from 'utils/strings';
@@ -24,7 +23,6 @@ const Model = function() {
 
     this.mediaController = Object.assign({}, Events);
     this.mediaModel = new MediaModel();
-    this.providerPromise = resolved;
 
     initQoe(this);
 
@@ -175,9 +173,10 @@ const Model = function() {
         this.set('qualityLabel', label);
     };
 
-    this.setActiveItem = function (item) {
+    this.setActiveItem = function (item, index) {
+        this.resetItem(item);
         this.attributes.playlistItem = null;
-        this.set('item', _.indexOf(this.get('playlist'), item));
+        this.set('item', index);
         this.set('minDvrWindow', item.minDvrWindow);
         this.set('playlistItem', item);
         this.trigger('itemReady', item);
@@ -351,10 +350,6 @@ const Model = function() {
          */
         if (trackIndex && tracks && trackIndex <= tracks.length && tracks[trackIndex - 1].data) {
             this.set('captionsTrack', tracks[trackIndex - 1]);
-        }
-
-        if (_provider && _provider.setSubtitlesTrack) {
-            _provider.setSubtitlesTrack(trackIndex);
         }
     };
 

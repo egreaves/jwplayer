@@ -150,10 +150,6 @@ Object.assign(Controller.prototype, {
         _captions = new Captions(_model);
         _captions.on('all', _triggerAfterReady);
 
-        function _video() {
-            return _model.getVideo();
-        }
-
         function _triggerAfterReady(type, e) {
             _this.triggerAfterReady(type, e);
         }
@@ -469,12 +465,7 @@ Object.assign(Controller.prototype, {
             }
 
             _model.set('errorEvent', undefined);
-
-            const provider = _model.getVideo();
             _programController.stopVideo();
-            if (!provider) {
-                _model.set('state', STATE_IDLE);
-            }
         }
 
         function _pause(meta) {
@@ -499,8 +490,7 @@ Object.assign(Controller.prototype, {
                     return;
                 case STATE_PLAYING:
                 case STATE_BUFFERING: {
-
-                    _video().pause();
+                    _programController.pause();
                     break;
                 }
                 default:
@@ -522,7 +512,8 @@ Object.assign(Controller.prototype, {
             if (!_model.get('scrubbing') && _model.get('state') !== STATE_PLAYING) {
                 _play(meta);
             }
-            _video().seek(pos);
+
+            _programController.position = pos;
         }
 
         function _item(index, meta) {
@@ -542,9 +533,7 @@ Object.assign(Controller.prototype, {
             index = (index + length) % length;
 
             const item = playlist[index];
-
-            _model.providerPromise = _programController.setActiveItem(item);
-            return _model.providerPromise;
+            return _programController.setActiveItem(item, index);
         }
 
         function _prev(meta) {
@@ -594,17 +583,11 @@ Object.assign(Controller.prototype, {
         }
 
         function _setCurrentQuality(index) {
-            if (_video()) {
-                index = parseInt(index, 10) || 0;
-                _video().setCurrentQuality(index);
-            }
+            _programController.quality = index;
         }
 
         function _getCurrentQuality() {
-            if (_video()) {
-                return _video().getCurrentQuality();
-            }
-            return -1;
+            return _programController.quality;
         }
 
         function _getConfig() {
@@ -635,38 +618,27 @@ Object.assign(Controller.prototype, {
         }
 
         function _getQualityLevels() {
-            if (_video()) {
-                return _video().getQualityLevels();
-            }
-            return null;
+            return _programController.qualities;
         }
 
         function _setCurrentAudioTrack(index) {
-            if (_video()) {
-                index = parseInt(index, 10) || 0;
-                _video().setCurrentAudioTrack(index);
-            }
+            _programController.audioTrack = index;
         }
 
         function _getCurrentAudioTrack() {
-            if (_video()) {
-                return _video().getCurrentAudioTrack();
-            }
-            return -1;
+            return _programController.audioTrack;
         }
 
         function _getAudioTracks() {
-            if (_video()) {
-                return _video().getAudioTracks();
-            }
-            return null;
+            return _programController.audioTracks;
         }
 
+        // TODO mediaController
         function _setCurrentCaptions(index) {
             index = parseInt(index, 10) || 0;
 
-            // update provider subtitle track
             _model.persistVideoSubtitleTrack(index);
+            _programController.subtitles = index;
 
             _this.trigger(CAPTIONS_CHANGED, {
                 tracks: _getCaptionsList(),
@@ -773,7 +745,7 @@ Object.assign(Controller.prototype, {
         this.setMute = _model.setMute.bind(_model);
         this.setPlaybackRate = _model.setPlaybackRate.bind(_model);
         this.getProvider = function() {
-            return _model.get('provider');
+            return _programController.activeProvider;
         };
         this.getWidth = function() {
             return _model.get('containerWidth');
@@ -843,11 +815,7 @@ Object.assign(Controller.prototype, {
                 mode = !_model.get('controls');
             }
             _model.set('controls', mode);
-
-            const provider = _model.getVideo();
-            if (provider) {
-                provider.setControls(mode);
-            }
+            _programController.controls = mode;
         };
 
         this.playerDestroy = function () {
@@ -901,7 +869,7 @@ Object.assign(Controller.prototype, {
             'setCurrentCaptions',
             'setCurrentQuality',
             'setFullscreen',
-        ], () => !_model.getVideo());
+        ], () => !_programController.activeProvider);
         // Add commands from CoreLoader to queue
         apiQueue.queue.push.apply(apiQueue.queue, commandQueue);
 

@@ -4,7 +4,7 @@ import getMediaElement from 'api/get-media-element';
 import cancelable from 'utils/cancelable';
 import MediaController from 'program/media-controller';
 
-import { PLAYER_STATE, STATE_BUFFERING } from 'events/events';
+import { PLAYER_STATE, STATE_BUFFERING, STATE_IDLE } from 'events/events';
 
 export default class ProgramController {
     constructor(model) {
@@ -15,13 +15,11 @@ export default class ProgramController {
         this.providerPromise = resolved;
     }
 
-    setActiveItem(item) {
-        const { mediaController } = this;
-        const model = this.model;
+    setActiveItem(item, index) {
+        const { mediaController, model } = this;
         this.thenPlayPromise.cancel();
 
-        model.setActiveItem(item);
-        model.resetItem(item);
+        model.setActiveItem(item, index);
 
         const source = item && item.sources && item.sources[0];
         if (source === undefined) {
@@ -29,15 +27,19 @@ export default class ProgramController {
             throw new Error('No media');
         }
 
-        if (mediaController && !this.providerController.canPlay(mediaController.provider, source)) {
-            // If we can't play the source with the current provider, reset the current one and
-            // prime the next tag within the gesture
-            this._destroyActiveMedia();
-        } else if (mediaController) {
-            // We can reuse the current mediaController
-            // Reset it so that a play call before the providerPromise resolves doesn't cause problems
-            // Any play calls will wait for the mediaController to setup again before calling play
-            this.mediaController.reset();
+        if (mediaController) {
+            // Buffer between item switches, but remain in the initial state (IDLE) while loading the first provider
+            model.set(PLAYER_STATE, STATE_BUFFERING);
+            if (!this.providerController.canPlay(mediaController.provider, source)) {
+                // If we can't play the source with the current provider, reset the current one and
+                // prime the next tag within the gesture
+                this._destroyActiveMedia();
+            } else {
+                // We can reuse the current mediaController
+                // Reset it so that a play call before the providerPromise resolves doesn't cause problems
+                // Any play calls will wait for the mediaController to setup again before calling play
+                this.mediaController.reset();
+            }
         }
 
         const mediaModelContext = model.mediaModel;
@@ -77,11 +79,11 @@ export default class ProgramController {
 
         // Setup means that we've already started playback on the current item; all we need to do is resume it
         if (mediaController && mediaController.setup) {
-            playPromise = mediaController.playVideo(item, playReason);
+            playPromise = mediaController.play(item, playReason);
         } else {
-            // Wait for the provider to load before starting inital playback
+            // Wait for the provider to load before starting initial playback
             playPromise = this.providerPromise.then((nextMediaController) => {
-                nextMediaController.playVideo(item, playReason);
+                nextMediaController.play(item, playReason);
             });
         }
 
@@ -97,7 +99,9 @@ export default class ProgramController {
         model.resetItem(item);
 
         if (mediaController) {
-            mediaController.stopVideo();
+            mediaController.stop();
+        } else {
+            model.set(PLAYER_STATE, STATE_IDLE);
         }
     }
 
@@ -114,8 +118,17 @@ export default class ProgramController {
 
         // Only attempt to preload if media hasn't been loaded and we haven't started
         if (model.get('state') === 'idle' && model.get('autostart') === false && !mediaController.setup) {
-            mediaController.preloadVideo(item);
+            mediaController.preload(item);
         }
+    }
+
+    pause() {
+        const { mediaController } = this;
+        if (!mediaController) {
+            return;
+        }
+
+        mediaController.pause();
     }
 
     castVideo(castProvider, item) {
@@ -145,7 +158,6 @@ export default class ProgramController {
         model.setPlaybackRate(model.get('defaultPlaybackRate'));
 
         this.mediaController = new MediaController(nextProvider, model);
-        model.setProvider(nextProvider);
     }
 
     _loadProviderConstructor(source) {
@@ -179,8 +191,96 @@ export default class ProgramController {
         this.mediaController.destroy();
         this.mediaController = null;
         model.resetProvider();
-        model.set(PLAYER_STATE, STATE_BUFFERING);
         replaceMediaElement(model);
+    }
+
+    get audioTrack() {
+        const { mediaController } = this;
+        if (!mediaController) {
+            return -1;
+        }
+
+        return mediaController.audioTrack;
+    }
+
+    get audioTracks() {
+        const { mediaController } = this;
+        if (!mediaController) {
+            return;
+        }
+
+        return mediaController.getAudioTracks();
+    }
+
+    get activeProvider() {
+        const { mediaController } = this;
+        if (!mediaController) {
+            return null;
+        }
+
+        return mediaController.provider;
+    }
+
+    get quality() {
+        if (!this.mediaController) {
+            return -1;
+        }
+
+        return this.mediaController.quality;
+    }
+
+    get qualities() {
+        const { mediaController } = this;
+        if (!mediaController) {
+            return null;
+        }
+
+        return mediaController.qualities;
+    }
+
+    set audioTrack(index) {
+        const { mediaController } = this;
+        if (!mediaController) {
+            return;
+        }
+
+        mediaController.audioTrack = parseInt(index, 10) || 0;
+    }
+
+    set controls(mode) {
+        const { mediaController } = this;
+        if (!mediaController) {
+            return;
+        }
+
+        mediaController.controls = mode;
+    }
+
+    set position(pos) {
+        const { mediaController } = this;
+        if (!mediaController) {
+            return;
+        }
+
+        mediaController.position = pos;
+    }
+
+    set quality(index) {
+        const { mediaController } = this;
+        if (!mediaController) {
+            return;
+        }
+
+        mediaController.currentQuality = parseInt(index, 10) || 0;
+    }
+
+    set subtitles(index) {
+        const { mediaController } = this;
+        if (!mediaController) {
+            return;
+        }
+
+        mediaController.subtitles = index;
     }
 }
 

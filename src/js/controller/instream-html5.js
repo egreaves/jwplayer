@@ -60,14 +60,14 @@ const InstreamHtml5 = function(_controller, _model) {
     };
 
     /** Load an instream item and initialize playback **/
-    _this.load = function(item) {
+    _this.load = function(item, index) {
         // Let the player media model know we're using it's video tag
         _this.srcReset();
 
         // Make sure it chooses a provider
         _programController.stopVideo();
         _checkProvider();
-        _programController.setActiveItem(item)
+        _programController.setActiveItem(item, index)
             .then(() => {
                 _checkProvider(_adModel.getVideo());
             });
