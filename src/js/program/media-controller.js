@@ -11,7 +11,6 @@ export default class MediaController {
         this.provider = provider;
         this.model = model;
         this.mediaModel = null;
-        this.thenPlayPromise = cancelable(() => {});
     }
 
     init(item) {

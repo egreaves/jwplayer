@@ -211,15 +211,6 @@ export default class ProgramController {
         return mediaController.getAudioTracks();
     }
 
-    get activeProvider() {
-        const { mediaController } = this;
-        if (!mediaController) {
-            return null;
-        }
-
-        return mediaController.provider;
-    }
-
     get quality() {
         if (!this.mediaController) {
             return -1;

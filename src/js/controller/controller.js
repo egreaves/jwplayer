@@ -745,7 +745,7 @@ Object.assign(Controller.prototype, {
         this.setMute = _model.setMute.bind(_model);
         this.setPlaybackRate = _model.setPlaybackRate.bind(_model);
         this.getProvider = function() {
-            return _programController.activeProvider;
+            return _model.get('provider');
         };
         this.getWidth = function() {
             return _model.get('containerWidth');
