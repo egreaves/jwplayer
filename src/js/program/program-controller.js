@@ -53,9 +53,8 @@ export default class ProgramController {
                     // Initialize the provider and mediaModel, sync it with the Model
                     // This sets up the mediaController and allows playback to begin
                     this.mediaController.init(item);
-                    return resolved(this.mediaController);
+                    return this.mediaController;
                 }
-                return resolved;
             });
         return this.providerPromise;
     }
@@ -78,6 +77,7 @@ export default class ProgramController {
             playPromise = mediaController.play(item, playReason);
         } else {
             // Wait for the provider to load before starting initial playback
+            // Make the subsequent promise cancelable so that we can avoid playback when no longer wanted
             const thenPlayPromise = model.thenPlayPromise = cancelable((nextMediaController) => {
                 nextMediaController.play(item, playReason);
             });
